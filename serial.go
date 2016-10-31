@@ -16,8 +16,8 @@ type Serialized interface {
 	RemainingCapacity() int64
 	Next() int64
 	NextN(int) int64
-	TryNext() (int64, *InsufficientCapacityError)
-	TryNextN(int) (int64, *InsufficientCapacityError)
+	TryNext() (int64, error)
+	TryNextN(int) (int64, error)
 	Publish(int64)
 	PublishRange(int64, int64)
 }
@@ -26,13 +26,13 @@ type Serializer interface {
 	Indexed
 	Serialized
 	Claim(int64)
-	IsAvailable(int64)
-	AddGatingSerial(...*Serial)
-	RemoveGatingSerial(*Serial)
+	IsAvailable(int64) bool
+	AddGatingSerials(...*Serial)
+	RemoveGatingSerial(*Serial) bool
 	NewBarrier(...*Serial) SerialBarrier
 	GetMinimumSerial() int64
 	GetHighestPublishedSerial(int64, int64) int64
-	NewPoll(BufferProvider, ...*Serial) *EventPoll
+	//NewPoll(BufferProvider, ...*Serial) *EventPoll
 }
 
 const SERIAL_INITIAL_VALUE = int64(-1)
@@ -107,13 +107,54 @@ func (s *abstractSerializer) GetIndex() int64 {
 	return s.index.Get()
 }
 
+func (s *abstractSerializer) HasAvailableCapacity(capacity int) bool  {
+	return true
+}
+
+func (s *abstractSerializer) IsAvailable(serialNo int64) bool {
+	return serialNo <= s.index.Get()
+}
+
+//publish
+func (s *abstractSerializer) Publish(serialNo int64) {
+	s.index.Set(serialNo)
+	s.waitStrategy.SignalAllWhenBlocking()
+}
+
+//PublishRange(int64, int64)
+func (s *abstractSerializer) PublishRange(lowSerialNo int64, highSerialNo int64) {
+	s.Publish(highSerialNo)
+}
+
+//next
+func (s *abstractSerializer) Next() int64 {
+	return s.NextN(1)
+}
+
+func (s *abstractSerializer) NextN(n int) int64 {
+	return int64(0)
+}
+
+//tryNext
+
+func (s *abstractSerializer) TryNext() (int64, error) {
+	return s.TryNextN(1)
+}
+
+
+func (s *abstractSerializer) TryNextN(n int) (int64, error) {
+	return int64(0), nil
+}
+
 //getBufferSize
 func (s *abstractSerializer) GetBufferSize() int {
 	return s.bufferSize
 }
 
+func (s *abstractSerializer) Claim(serialNo int64) {}
+
 //addGatingSequences
-func (s *abstractSerializer) AddGatingSerial(gatingSerials ...*Serial) {
+func (s *abstractSerializer) AddGatingSerials(gatingSerials ...*Serial) {
 	var indexSerials int64
 	var updatedSerials []*Serial
 	var currentSerials []*Serial
@@ -169,17 +210,27 @@ func (s *abstractSerializer) RemoveGatingSerial(serial *Serial) bool {
 	return numRemoved > 0
 }
 
+func (s *abstractSerializer) RemainingCapacity() int64 {
+	return int64(0)
+}
+
 func (s *abstractSerializer) GetMinimumSerial() int64 {
 	return getMinimumSerial(s.gatingSerials, s.index.Get())
 }
 
 func (s *abstractSerializer) NewBarrier(serialsToTrack ...*Serial) SerialBarrier {
-	return NewProcessingSerialBarrier(s, s.waitStrategy, s.index, s.gatingSerials)
+	return NewProcessingSerialBarrier(s, s.waitStrategy, s.index, serialsToTrack)
 }
 
+func (s *abstractSerializer) GetHighestPublishedSerial(lowerBound int64, availableSerialNo int64) int64 {
+	return availableSerialNo
+}
+
+/*
 func (s *abstractSerializer) NewPoll(bufferProvider BufferProvider, gatingSerials ...*Serial) *EventPoll {
 	return NewEventPoll(bufferProvider, s, NewSerial(), s.index, gatingSerials...)
 }
+*/
 
 
 type SingleProducerSerializer struct {
@@ -190,7 +241,7 @@ type SingleProducerSerializer struct {
 	rhsPadding []int64
 }
 
-func NewSingleProducerSequencer(bufferSize int, waitStrategy WaitStrategy) *SingleProducerSerializer {
+func NewSingleProducerSerializer(bufferSize int, waitStrategy WaitStrategy) *SingleProducerSerializer {
 	return &SingleProducerSerializer{
 		abstractSerializer:newAbstractSequencer(bufferSize, waitStrategy),
 		lhsPadding:make([]int64, 7),
@@ -251,12 +302,12 @@ func (s *SingleProducerSerializer) TryNext() (int64, error) {
 }
 
 
-func (s *SingleProducerSerializer) TryNextN(n int) (int64, *InsufficientCapacityError) {
+func (s *SingleProducerSerializer) TryNextN(n int) (int64, error) {
 	if n < 0 {
 		panic("n must be > 0")
 	}
 	if !s.HasAvailableCapacity(n) {
-		return int64(0), NewInsufficientCapacityError()
+		return int64(0), InsufficientCapacityError
 	}
 	s.nextValue = s.nextValue + int64(n)
 	nextSerial := s.nextValue

@@ -11,7 +11,7 @@ type EventHandler interface {
 }
 
 // EventPoll
-
+/*
 type EventPoll struct {
 	bufferProvider BufferProvider
 	serializer Serializer
@@ -74,3 +74,4 @@ func (e *EventPoll) Poll(eventHandler EventPollHandler) (string, error) {
 		return POLL_STATE_IDLE, nil
 	}
 }
+*/

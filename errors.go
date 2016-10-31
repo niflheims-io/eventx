@@ -1,59 +1,44 @@
 package eventx
 
-import "errors"
+import (
+	"errors"
+	"log"
+)
 
-type Error struct {
-	e error
+var (
+	InsufficientCapacityError = errors.New("Insufficient capacity error.")
+	AlertError = errors.New("Alert error.")
+	InterruptedError = errors.New("Interrupted error.")
+	TimeoutError = errors.New("Timeout error.")
+)
+
+type ErrorHandler interface {
+	HandleEventError(error, int64, interface{})
+	HandleOnStartError(error)
+	HandleOnShutdownError(error)
 }
 
-func NewError(e error) *Error {
-	return &Error{e:e}
+type FatalErrorHandler struct {
+	logger *log.Logger
 }
 
-func (r *Error) Error() error {
-	return r.e
+func NewFatalErrorHandler(logger *log.Logger) *FatalErrorHandler {
+	return &FatalErrorHandler{logger:logger}
 }
 
-type InsufficientCapacityError struct {
-	*Error
+func (h *FatalErrorHandler) HandleEventError(err error, sequence int64, event interface{}) {
+	h.logger.Fatalln("Error processing: ", sequence, event, err)
 }
 
-func NewInsufficientCapacityError() *InsufficientCapacityError {
-	return &InsufficientCapacityError{
-		Error:NewError(errors.New("Insufficient capacity error.")),
-	}
+func (h *FatalErrorHandler) HandleOnStartError(err error) {
+	h.logger.Fatalln("Exception during OnStart()", err)
 }
 
-type AlertError struct {
-	*Error
+func (h *FatalErrorHandler) HandleOnShutdownError(err error) {
+	h.logger.Fatalln("Exception during OnShutdown()", err)
 }
 
-func NewAlertError() *AlertError {
-	return &AlertError{
-		Error:NewError(errors.New("Alert error.")),
-	}
+type TimeoutHandler interface {
+	OnTimeout(int64) error
 }
 
-type InterruptedError struct {
-	*Error
-}
-
-func NewInterruptedError() *InterruptedError {
-	return &InterruptedError{
-		Error:NewError(errors.New("Interrupted error.")),
-	}
-}
-
-type TimeoutError struct {
-	*Error
-}
-
-func NewTimeoutError() *TimeoutError {
-	return &TimeoutError{
-		Error:NewError(errors.New("Timeout error.")),
-	}
-}
-
-// ExceptionHandler
-
-// const error

@@ -26,7 +26,7 @@ func (w *YieldingWaitStrategy) WaitFor(sequence int64, index *Serial, dependentS
 		if availableSerial < sequence {
 			checkErr := barrier.CheckAlert()
 			if checkErr != nil {
-				return int64(0), checkErr.Error.Error()
+				return int64(0), checkErr
 			}
 			if counter == 0 {
 				runtime.Gosched()
@@ -64,7 +64,7 @@ func (w *BlockingWaitStrategy) WaitFor(serial int64, index *Serial, dependentSer
 				checkErr := barrier.CheckAlert()
 				if checkErr != nil {
 					w.lock.Unlock()
-					return int64(0), checkErr.Error.Error()
+					return int64(0), checkErr
 				}
 				w.cond.Wait()
 			} else {
@@ -78,7 +78,7 @@ func (w *BlockingWaitStrategy) WaitFor(serial int64, index *Serial, dependentSer
 		if availableSerial < serial {
 			checkErr := barrier.CheckAlert()
 			if checkErr != nil {
-				return int64(0), checkErr.Error.Error()
+				return int64(0), checkErr
 			}
 			availableSerial = dependentSerial.Get()
 		} else {

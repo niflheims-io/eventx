@@ -4,18 +4,18 @@ package eventx
 // serialBarrier -> SequenceBarrier
 
 type SerialBarrier interface {
-	WaitFor(int64) (int64, *AlertError, *InterruptedError, *TimeoutError)
+	WaitFor(int64) (int64, error)
 	GetIndex() int64
 	IsAlerted() bool
 	Alert()
 	ClearAlert()
-	CheckAlert() *AlertError
+	CheckAlert() error
 }
 
 type ProcessingSerialBarrier struct {
 	waitStrategy WaitStrategy
 	dependentSerial *Serial
-	alerted *VolatileBoolean
+	alerted *AtomicBoolean
 	indexSerial *Serial
 	serializer Serializer
 }
@@ -24,23 +24,21 @@ func NewProcessingSerialBarrier(serializer Serializer, waitStrategy WaitStrategy
 	var dependentSerial *Serial
 	if len(dependentSerials) == 0 {
 		dependentSerial = indexSerial
-	} else {
-		dependentSerial = NewFixedSerialSet(dependentSerials)
 	}
 	return &ProcessingSerialBarrier{
 		serializer:serializer,
 		waitStrategy:waitStrategy,
 		indexSerial:indexSerial,
-		alerted:NewVolatileBoolean(false),
+		alerted:NewAtomicBoolean(false),
 		dependentSerial:dependentSerial,
 	}
 }
 
 //waitFor
-func (b *ProcessingSerialBarrier) WaitFor(serial int64) (int64, *AlertError, *InterruptedError, *TimeoutError) {
+func (b *ProcessingSerialBarrier) WaitFor(serial int64) (int64, error) {
 	checkErr := b.CheckAlert()
 	if checkErr != nil {
-		return int64(0), checkErr, nil, nil
+		return int64(0), checkErr
 	}
 	availableSerial, waitErr := b.waitStrategy.WaitFor(serial, b.indexSerial, b.dependentSerial, b)
 	if waitErr != nil {
@@ -58,9 +56,9 @@ func (b *ProcessingSerialBarrier) ClearAlert() {
 }
 
 //checkAlert
-func (b *ProcessingSerialBarrier) CheckAlert() *AlertError {
+func (b *ProcessingSerialBarrier) CheckAlert() error {
 	if b.alerted.Get() {
-		return NewAlertError()
+		return AlertError
 	}
 	return nil
 }
